@@ -15,7 +15,7 @@ export function FullscreenOverlay({
     <div className="fullscreen-overlay" role="dialog" aria-modal="true">
       <div className="overlay-panel">
         <span className="eyebrow">TRIAL INTERRUPTED</span>
-        <h2>Return to fullscreen to continue.</h2>
+        <h2>TRIAL PAUSED: Fullscreen and active focus required.</h2>
         <p>
           {supported
             ? "Progress is preserved. Resume the trial when you are ready."

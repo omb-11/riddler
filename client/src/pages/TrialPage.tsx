@@ -57,6 +57,22 @@ export function TrialPage({
     }
   }, [team?.status]);
 
+  useEffect(() => {
+    if (!team || currentTask?.answerType !== "TOWER_VERIFICATION") {
+      return;
+    }
+
+    const refresh = window.setInterval(() => {
+      void api.getSession().then((response) => {
+        if (response.team) {
+          setTeam(response.team);
+        }
+      }).catch(() => undefined);
+    }, 5000);
+
+    return () => window.clearInterval(refresh);
+  }, [team?.id, team?.status, currentTask?.id, currentTask?.answerType, setTeam]);
+
   async function handleCreateSession(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -154,16 +170,17 @@ export function TrialPage({
     ];
 
     return (
-      <main className="trial-shell odyssey-shell">
+      <main className="trial-shell">
         <div className="sky-glow sky-glow-one" />
         <div className="sky-glow sky-glow-two" />
 
-        <section className="hero-panel odyssey-hero editorial-hero">
+        <section className="hero-panel editorial-hero">
           <div className="hero-grid">
             <div className="hero-copy">
               <span className="eyebrow">RIDDLER / ROUND 01</span>
-              <h1>THE PIRATE TRIALS</h1>
+              <h1>THE PIRATE<br />TRIALS</h1>
               <p className="tagline">Every clue has a price. Every second matters.</p>
+              <p className="small-description">A fast, atmospheric puzzle challenge where teams race through clues, timing, and hidden routes.</p>
 
               <div className="hero-metrics compact-metrics">
                 <div className="metric-pill">
@@ -233,18 +250,18 @@ export function TrialPage({
   ];
 
   return (
-    <main className="trial-shell app-shell odyssey-shell">
+    <main className="trial-shell app-shell">
       <FullscreenOverlay
         visible={fullscreen.interrupted || team.status === "PAUSED"}
         supported={fullscreen.supported}
         onResume={handleResume}
       />
 
-      <div className="app-frame odyssey-frame">
-        <header className="trial-header odyssey-header">
+      <div className="app-frame">
+        <header className="trial-header">
           <div>
             <span className="brand">RIDDLER</span>
-            <p>CREW — {team.teamName.toUpperCase()} // ROUND 01 / TASK {team.currentTask || "00"}</p>
+            <p>CREW — {team.teamName.toUpperCase()} <span className="header-slash">/</span> ROUND 01 <span className="header-slash">/</span> TASK {team.currentTask || "00"}</p>
           </div>
           <div className="header-side">
             <span className="live-badge">LIVE</span>
@@ -258,10 +275,10 @@ export function TrialPage({
           </div>
         </header>
 
-        <section className="trial-content odyssey-layout">
+        <section className="trial-content mission-layout">
           <div className="mission-panel">
             {showRules ? (
-              <div className="content-panel odyssey-panel">
+              <div className="content-panel">
                 <span className="eyebrow">ROUND 01</span>
                 <h2>THE STAR MAP OPENS</h2>
                 <p>
@@ -278,14 +295,14 @@ export function TrialPage({
                 </button>
               </div>
             ) : showWin ? (
-              <div className="content-panel success-state odyssey-panel">
+              <div className="content-panel success-state">
                 <span className="eyebrow">TRIAL COMPLETE</span>
-                <h2>THE ROUTE IS YOURS.</h2>
-                <p>Report to the event coordinator to receive your final route clue.</p>
+                <h2>THE MAP AWAITS.</h2>
+                <p>Report to the event coordinator to receive your location clue.</p>
                 <p className="fine-print">Progress is recorded. Remain on the device until confirmed.</p>
               </div>
             ) : task ? (
-              <div className="content-panel odyssey-panel">
+              <div className="content-panel">
                 <div className="task-meta">
                   <span className="eyebrow">TASK {task.taskNumber.toString().padStart(2, "0")}</span>
                   <h2>{task.title.toUpperCase()}</h2>
@@ -334,7 +351,7 @@ export function TrialPage({
                 )}
               </div>
             ) : (
-              <div className="content-panel odyssey-panel">
+              <div className="content-panel">
                 <p>No active challenge is available.</p>
               </div>
             )}
@@ -356,7 +373,7 @@ export function TrialPage({
             <div className="sidebar-card">
               <span className="eyebrow small">RESOURCE FILES</span>
               <ul className="resource-list">
-                <li>Audio: Odyssey Theme</li>
+                <li>Audio: ambient channel</li>
                 <li>Route: Secret Map</li>
                 <li>Signal: Live Relay</li>
               </ul>

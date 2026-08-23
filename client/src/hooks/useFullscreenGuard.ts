@@ -44,6 +44,13 @@ export function useFullscreenGuard({ enabled, pauseOnHidden }: Options) {
       });
     };
 
+    const onWindowBlur = () => {
+      if (pauseOnHidden) {
+        setInterrupted(true);
+      }
+      void api.logEvent("TAB_HIDDEN", { source: "window-blur" });
+    };
+
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
@@ -51,11 +58,13 @@ export function useFullscreenGuard({ enabled, pauseOnHidden }: Options) {
 
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("blur", onWindowBlur);
     window.addEventListener("beforeunload", onBeforeUnload);
 
     return () => {
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("blur", onWindowBlur);
       window.removeEventListener("beforeunload", onBeforeUnload);
     };
   }, [enabled, pauseOnHidden]);

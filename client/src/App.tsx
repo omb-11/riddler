@@ -34,13 +34,13 @@ export default function App() {
 
   if (loading) {
     return (
-      <main className="trial-shell odyssey-shell loading-shell">
+      <main className="trial-shell loading-shell">
         <div className="sky-glow sky-glow-one" />
         <div className="sky-glow sky-glow-two" />
-        <section className="hero-panel odyssey-hero loading-panel">
+        <section className="hero-panel loading-panel">
           <span className="eyebrow">STABILIZING SIGNAL</span>
-          <h1>ODYSSEY</h1>
-          <p className="tagline">Aligning the star map and preparing the route...</p>
+          <h1>RIDDLER</h1>
+          <p className="tagline">Preparing the trial instrument...</p>
         </section>
       </main>
     );
