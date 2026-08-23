@@ -1,0 +1,21 @@
+{
+  "name": "riddler",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "lint": "npm run lint -w server && npm run lint -w client",
+    "prisma:generate": "npm run prisma:generate -w server",
+    "prisma:migrate": "npm run prisma:migrate -w server",
+    "prisma:push": "npm run prisma:push -w server",
+    "prisma:seed": "npm run prisma:seed -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "RIDDLER",
+  "short_name": "RIDDLER",
+  "description": "Fullscreen challenge mode for The Pirate Trials.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1318",
+  "theme_color": "#0d1318",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

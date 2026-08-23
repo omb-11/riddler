@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum TeamStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  DISQUALIFIED
+}
+
+enum TaskStateStatus {
+  LOCKED
+  AVAILABLE
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum AnswerType {
+  TEXT
+  NUMBER
+  MULTIPLE_CHOICE
+  TOWER_VERIFICATION
+}
+
+enum EventType {
+  TEAM_CREATED
+  SESSION_RESUMED
+  ROUND_STARTED
+  TASK_STARTED
+  ANSWER_SUBMITTED
+  ANSWER_CORRECT
+  ANSWER_WRONG
+  TASK_COMPLETED
+  FULLSCREEN_ENTERED
+  FULLSCREEN_EXITED
+  TAB_HIDDEN
+  TAB_VISIBLE
+  ROUND_COMPLETED
+  TEAM_RESET
+  TEAM_DISQUALIFIED
+  TEAM_ADVANCED
+  ADMIN_LOGIN
+  ADMIN_LOGOUT
+  EVENT_PAUSED
+  EVENT_RESUMED
+  SUBMISSIONS_LOCKED
+  SUBMISSIONS_UNLOCKED
+}
+
+model Team {
+  id             String          @id @default(cuid())
+  teamCode       String          @unique
+  teamName       String
+  normalizedName String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  currentRound   Int             @default(1)
+  currentTask    Int             @default(0)
+  status         TeamStatus      @default(PENDING)
+  completedAt    DateTime?
+  lastActivityAt DateTime        @default(now())
+  notes          String?
+  isTestTeam     Boolean         @default(false)
+  winnerRank     Int?
+  taskStates     TeamTaskState[]
+  submissions    Submission[]
+  events         EventLog[]
+
+  @@index([normalizedName])
+}
+
+model Task {
+  id                 String            @id @default(cuid())
+  roundNumber        Int
+  taskNumber         Int
+  orderIndex         Int
+  title              String
+  description        String
+  pseudocode         String?
+  question           String
+  answerType         AnswerType
+  correctAnswer      String?
+  acceptedAnswers    Json?
+  timeLimitSeconds   Int
+  requiredTowerHeight Int?
+  maxAttempts        Int?
+  hint               String?
+  hintAvailable      Boolean           @default(false)
+  unlockCondition    String?
+  isActive           Boolean           @default(true)
+  revealAnswerOnFail Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  teamStates         TeamTaskState[]
+  submissions        Submission[]
+
+  @@unique([roundNumber, taskNumber])
+}
+
+model TeamTaskState {
+  id              String           @id @default(cuid())
+  teamId          String
+  taskId          String
+  status          TaskStateStatus  @default(LOCKED)
+  startedAt       DateTime?
+  deadlineAt      DateTime?
+  completedAt     DateTime?
+  attemptCount    Int              @default(0)
+  completionNotes String?
+  verifiedByAdmin Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  team            Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  task            Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, taskId])
+}
+
+model Submission {
+  id              String   @id @default(cuid())
+  teamId          String
+  taskId          String
+  submittedAnswer String
+  normalizedAnswer String
+  isCorrect       Boolean
+  attemptNumber   Int
+  submittedAt     DateTime @default(now())
+  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model EventLog {
+  id         String    @id @default(cuid())
+  teamId      String?
+  eventType   EventType
+  timestamp   DateTime  @default(now())
+  metadata    Json?
+  team        Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AppConfig {
+  id                     String   @id @default("default")
+  eventTitle             String   @default("The Pirate Trials")
+  eventStatus            String   @default("READY")
+  submissionsLocked      Boolean  @default(false)
+  eventPaused            Boolean  @default(false)
+  pauseOnFullscreenExit  Boolean  @default(true)
+  pauseOnTabHidden       Boolean  @default(false)
+  musicEnabled           Boolean  @default(true)
+  soundsEnabled          Boolean  @default(true)
+  musicTrackPath         String   @default("/audio/odyssey-theme.mp3")
+  updatedAt              DateTime @updatedAt
+}

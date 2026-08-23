@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Riddler">
+  <rect width="128" height="128" rx="24" fill="#0d1318"/>
+  <circle cx="64" cy="64" r="44" fill="none" stroke="#b78a44" stroke-width="4"/>
+  <path d="M64 24v16M64 88v16M24 64h16M88 64h16M37 37l11 11M80 80l11 11M91 37 80 48M48 80 37 91" stroke="#8c6730" stroke-width="4" stroke-linecap="round"/>
+  <path d="M64 42c-9 0-16 7-16 16 0 6 3 11 8 14v10h16V72c5-3 8-8 8-14 0-9-7-16-16-16Z" fill="#d6bf8e"/>
+  <circle cx="64" cy="56" r="5" fill="#0d1318"/>
+</svg>
