@@ -20,7 +20,21 @@ app.use(
 );
 app.use(
   cors({
-    origin: config.clientUrl,
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (
+        origin === config.clientUrl ||
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost")
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS origin not allowed."));
+    },
     credentials: true
   })
 );

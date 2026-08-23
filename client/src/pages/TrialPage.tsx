@@ -34,6 +34,7 @@ export function TrialPage({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [towerMessage, setTowerMessage] = useState<string | null>(null);
+  const [clock, setClock] = useState(() => new Date());
   const currentTask = useMemo(() => getCurrentTask(team), [team]);
   const audio = useAudio(
     team?.config.musicTrackPath,
@@ -44,6 +45,11 @@ export function TrialPage({
     enabled: Boolean(team),
     pauseOnHidden: team?.config.pauseOnTabHidden ?? false
   });
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (team?.status === "COMPLETED") {
@@ -141,12 +147,50 @@ export function TrialPage({
   }
 
   if (!team) {
+    const landingCards = [
+      { title: "Map", caption: "A hidden route" },
+      { title: "Signal", caption: "Stabilized" },
+      { title: "Audio", caption: "Track ready" }
+    ];
+
     return (
-      <main className="trial-shell">
-        <section className="hero-panel">
-          <span className="eyebrow">WELCOME, CREW</span>
-          <h1>RIDDLER</h1>
-          <p className="tagline">ENTER THE TRIAL. SOLVE THE RIDDLE. CLAIM THE TREASURE.</p>
+      <main className="trial-shell odyssey-shell">
+        <div className="sky-glow sky-glow-one" />
+        <div className="sky-glow sky-glow-two" />
+
+        <section className="hero-panel odyssey-hero">
+          <div className="hero-grid">
+            <div className="hero-copy">
+              <span className="eyebrow">AETHER / EVENT 01</span>
+              <h1>ODYSSEY</h1>
+              <p className="tagline">Thread the stars, decode the signal, and reclaim the lost route.</p>
+
+              <div className="hero-metrics">
+                <div className="metric-pill">
+                  <span>Signal</span>
+                  <strong>Stable</strong>
+                </div>
+                <div className="metric-pill">
+                  <span>Route</span>
+                  <strong>24/7</strong>
+                </div>
+                <div className="metric-pill">
+                  <span>Voyage</span>
+                  <strong>Live</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="hero-visual" aria-hidden="true">
+              <div className="planet-sphere" />
+              <div className="planet-ring ring-one" />
+              <div className="planet-ring ring-two" />
+              <div className="signal-dot dot-one" />
+              <div className="signal-dot dot-two" />
+              <div className="signal-dot dot-three" />
+            </div>
+          </div>
+
           <form className="stack-form" onSubmit={handleCreateSession}>
             <label>
               <span>ENTER YOUR TEAM NAME</span>
@@ -163,6 +207,15 @@ export function TrialPage({
               {loading ? "ENTERING..." : "ENTER THE TRIAL"}
             </button>
           </form>
+
+          <div className="resource-band">
+            {landingCards.map((card) => (
+              <div key={card.title} className="resource-card">
+                <span>{card.title}</span>
+                <strong>{card.caption}</strong>
+              </div>
+            ))}
+          </div>
         </section>
       </main>
     );
@@ -171,22 +224,29 @@ export function TrialPage({
   const showRules = team.status === "PENDING" || team.currentTask === 0;
   const showWin = team.status === "COMPLETED";
   const task = currentTask;
+  const missionStats = [
+    { label: "Crew", value: team.teamName },
+    { label: "Current", value: `Task ${team.currentTask || 0}` },
+    { label: "Status", value: team.status },
+    { label: "Clock", value: clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }
+  ];
 
   return (
-    <main className="trial-shell app-shell">
+    <main className="trial-shell app-shell odyssey-shell">
       <FullscreenOverlay
         visible={fullscreen.interrupted || team.status === "PAUSED"}
         supported={fullscreen.supported}
         onResume={handleResume}
       />
 
-      <div className="app-frame">
-        <header className="trial-header">
+      <div className="app-frame odyssey-frame">
+        <header className="trial-header odyssey-header">
           <div>
-            <span className="brand">RIDDLER</span>
-            <p>ROUND 01 / TASK {team.currentTask || "00"}</p>
+            <span className="brand">ODYSSEY</span>
+            <p>{team.teamName.toUpperCase()} // ROUND 01 / TASK {team.currentTask || "00"}</p>
           </div>
           <div className="header-side">
+            <span className="live-badge">LIVE</span>
             {task ? (
               <TimerDisplay
                 deadlineAt={task.deadlineAt}
@@ -197,85 +257,110 @@ export function TrialPage({
           </div>
         </header>
 
-        <section className="trial-content">
-          {showRules ? (
-            <div className="content-panel">
-              <span className="eyebrow">ROUND 01</span>
-              <h2>THE PIRATE TRIALS</h2>
-              <p>
-                Task 1 begins with the Mystery Box. Identify the physical clue, solve the challenge, and unlock Pirate Tower.
-              </p>
-              <ul className="rule-list">
-                <li>Mystery Box: 60 seconds, touch only.</li>
-                <li>Pirate Tower: 2 minutes, every member contributes.</li>
-                <li>The first crew to clear Round 1 wins the Pirate Map clue.</li>
-              </ul>
-              {error ? <p className="feedback error">{error}</p> : null}
-              <button type="button" className="primary-button" onClick={beginTrial} disabled={loading}>
-                BEGIN TRIAL
-              </button>
-            </div>
-          ) : showWin ? (
-            <div className="content-panel success-state">
-              <span className="eyebrow">TRIAL COMPLETE</span>
-              <h2>THE MAP AWAITS.</h2>
-              <p>Report to the event coordinator to receive your Pirate Map clue.</p>
-              <p className="fine-print">Progress is recorded. Do not close the device until confirmed.</p>
-            </div>
-          ) : task ? (
-            <div className="content-panel">
-              <div className="task-meta">
-                <span className="eyebrow">TASK {task.taskNumber.toString().padStart(2, "0")}</span>
-                <h2>{task.title.toUpperCase()}</h2>
-                <p>{task.description}</p>
+        <section className="trial-content odyssey-layout">
+          <div className="mission-panel">
+            {showRules ? (
+              <div className="content-panel odyssey-panel">
+                <span className="eyebrow">ROUND 01</span>
+                <h2>THE STAR MAP OPENS</h2>
+                <p>
+                  Task 1 begins with the Mystery Box. Identify the physical clue, solve the challenge, and unlock the hidden tower.
+                </p>
+                <ul className="rule-list">
+                  <li>Mystery Box: 60 seconds, touch only.</li>
+                  <li>Signal Tower: 2 minutes, every crew member contributes.</li>
+                  <li>The first crew to clear Round 1 claims the lost route clue.</li>
+                </ul>
+                {error ? <p className="feedback error">{error}</p> : null}
+                <button type="button" className="primary-button" onClick={beginTrial} disabled={loading}>
+                  BEGIN TRIAL
+                </button>
               </div>
+            ) : showWin ? (
+              <div className="content-panel success-state odyssey-panel">
+                <span className="eyebrow">TRIAL COMPLETE</span>
+                <h2>THE ROUTE IS YOURS.</h2>
+                <p>Report to the event coordinator to receive your final route clue.</p>
+                <p className="fine-print">Progress is recorded. Remain on the device until confirmed.</p>
+              </div>
+            ) : task ? (
+              <div className="content-panel odyssey-panel">
+                <div className="task-meta">
+                  <span className="eyebrow">TASK {task.taskNumber.toString().padStart(2, "0")}</span>
+                  <h2>{task.title.toUpperCase()}</h2>
+                  <p>{task.description}</p>
+                </div>
 
-              <PseudocodePanel pseudocode={task.pseudocode} question={task.question} />
+                <PseudocodePanel pseudocode={task.pseudocode} question={task.question} />
 
-              {task.answerType === "TOWER_VERIFICATION" ? (
-                <section className="challenge-block">
-                  <div className="tower-spec">
-                    <p>Required Height: <strong>{task.requiredTowerHeight ?? "-"}</strong></p>
-                    <p>Once the tower meets the requirement, submit it for operator verification.</p>
+                {task.answerType === "TOWER_VERIFICATION" ? (
+                  <section className="challenge-block">
+                    <div className="tower-spec">
+                      <p>Required Height: <strong>{task.requiredTowerHeight ?? "-"}</strong></p>
+                      <p>Once the tower meets the requirement, submit it for operator verification.</p>
+                    </div>
+                    {towerMessage ? <p className="feedback success">{towerMessage}</p> : null}
+                    {error ? <p className="feedback error">{error}</p> : null}
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={() => handleTowerSubmit(task)}
+                      disabled={loading}
+                    >
+                      SUBMIT CHALLENGE
+                    </button>
+                  </section>
+                ) : (
+                  <form className="answer-form" onSubmit={handleSubmitAnswer}>
+                    <label>
+                      <span>ANSWER</span>
+                      <input
+                        value={answer}
+                        onChange={(event) => setAnswer(event.target.value)}
+                        placeholder="Enter your answer"
+                        required
+                      />
+                    </label>
+                    {task.hint ? <p className="hint-text">Hint: {task.hint}</p> : null}
+                    {feedback ? (
+                      <p className={`feedback ${feedback === "TASK CLEARED" ? "success" : "error"}`}>{feedback}</p>
+                    ) : null}
+                    {error ? <p className="feedback error">{error}</p> : null}
+                    <button type="submit" className="primary-button" disabled={loading}>
+                      CHECK ANSWER
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              <div className="content-panel odyssey-panel">
+                <p>No active challenge is available.</p>
+              </div>
+            )}
+          </div>
+
+          <aside className="mission-sidebar">
+            <div className="sidebar-card">
+              <span className="eyebrow small">MISSION BOARD</span>
+              <div className="mini-grid">
+                {missionStats.map((stat) => (
+                  <div key={stat.label} className="mini-stat">
+                    <span>{stat.label}</span>
+                    <strong>{stat.value}</strong>
                   </div>
-                  {towerMessage ? <p className="feedback success">{towerMessage}</p> : null}
-                  {error ? <p className="feedback error">{error}</p> : null}
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => handleTowerSubmit(task)}
-                    disabled={loading}
-                  >
-                    SUBMIT CHALLENGE
-                  </button>
-                </section>
-              ) : (
-                <form className="answer-form" onSubmit={handleSubmitAnswer}>
-                  <label>
-                    <span>ANSWER</span>
-                    <input
-                      value={answer}
-                      onChange={(event) => setAnswer(event.target.value)}
-                      placeholder="Enter your answer"
-                      required
-                    />
-                  </label>
-                  {task.hint ? <p className="hint-text">Hint: {task.hint}</p> : null}
-                  {feedback ? (
-                    <p className={`feedback ${feedback === "TASK CLEARED" ? "success" : "error"}`}>{feedback}</p>
-                  ) : null}
-                  {error ? <p className="feedback error">{error}</p> : null}
-                  <button type="submit" className="primary-button" disabled={loading}>
-                    CHECK ANSWER
-                  </button>
-                </form>
-              )}
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="content-panel">
-              <p>No active challenge is available.</p>
+
+            <div className="sidebar-card">
+              <span className="eyebrow small">RESOURCE FILES</span>
+              <ul className="resource-list">
+                <li>Audio: Odyssey Theme</li>
+                <li>Route: Secret Map</li>
+                <li>Signal: Live Relay</li>
+              </ul>
             </div>
-          )}
+          </aside>
         </section>
 
         <AudioDock

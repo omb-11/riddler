@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { AnswerType, EventType, TaskStateStatus, TeamStatus } from "@prisma/client";
+import { AnswerType, EventType, Prisma, TaskStateStatus, TeamStatus } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { clearAdminCookie, setAdminCookie } from "../lib/cookies.js";
@@ -14,6 +14,14 @@ import {
 } from "../services/team.js";
 
 const router = Router();
+
+function resolveParamId(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -42,6 +50,9 @@ const taskSchema = z.object({
 });
 
 const configSchema = z.object({
+  eventTitle: z.string().trim().min(2).max(120).optional(),
+  roundName: z.string().trim().min(2).max(80).optional(),
+  eventStatus: z.string().trim().min(2).max(40).optional(),
   eventPaused: z.boolean().optional(),
   submissionsLocked: z.boolean().optional(),
   pauseOnFullscreenExit: z.boolean().optional(),
@@ -140,7 +151,7 @@ router.get("/dashboard", requireAdmin, async (_req, res) => {
   ]);
 
   const winners = teams
-    .filter((team) => team.status === TeamStatus.COMPLETED)
+    .filter((team) => team.status === TeamStatus.COMPLETED && !team.isTestTeam)
     .sort((a, b) => {
       if (!a.completedAt || !b.completedAt) {
         return 0;
@@ -237,16 +248,34 @@ router.get("/teams", requireAdmin, async (req, res) => {
 });
 
 router.get("/teams/:teamId/timeline", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
   const events = await prisma.eventLog.findMany({
-    where: { teamId: req.params.teamId },
+    where: { teamId },
     orderBy: { timestamp: "asc" }
   });
   res.json({ events });
 });
 
 router.post("/teams/:teamId/reset", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
   const team = await prisma.team.findUnique({
-    where: { id: req.params.teamId },
+    where: { id: teamId },
     include: {
       taskStates: {
         include: { task: true }
@@ -301,8 +330,17 @@ router.post("/teams/:teamId/reset", requireAdmin, async (req, res) => {
 });
 
 router.post("/teams/:teamId/disqualify", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
   await prisma.team.update({
-    where: { id: req.params.teamId },
+    where: { id: teamId },
     data: {
       status: TeamStatus.DISQUALIFIED,
       lastActivityAt: new Date()
@@ -310,16 +348,25 @@ router.post("/teams/:teamId/disqualify", requireAdmin, async (req, res) => {
   });
 
   await logEvent(EventType.TEAM_DISQUALIFIED, {
-    teamId: req.params.teamId
+    teamId
   });
 
   res.json({ success: true });
 });
 
 router.post("/teams/:teamId/advance", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
   const state = await prisma.teamTaskState.findFirst({
     where: {
-      teamId: req.params.teamId,
+      teamId,
       status: {
         in: [TaskStateStatus.AVAILABLE, TaskStateStatus.IN_PROGRESS]
       }
@@ -341,13 +388,13 @@ router.post("/teams/:teamId/advance", requireAdmin, async (req, res) => {
     });
   }
 
-  await completeTask(req.params.teamId, state.taskId, {
+  await completeTask(teamId, state.taskId, {
     verifiedByAdmin: true,
     completionNotes: "Advanced manually by admin."
   });
 
   await logEvent(EventType.TEAM_ADVANCED, {
-    teamId: req.params.teamId,
+    teamId,
     metadata: {
       taskNumber: state.task.taskNumber
     }
@@ -357,7 +404,17 @@ router.post("/teams/:teamId/advance", requireAdmin, async (req, res) => {
 });
 
 router.post("/teams/:teamId/complete-task/:taskId", requireAdmin, async (req, res) => {
-  await completeTask(req.params.teamId, req.params.taskId, {
+  const teamId = resolveParamId(req.params.teamId);
+  const taskId = resolveParamId(req.params.taskId);
+
+  if (!teamId || !taskId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_OR_TASK_ID",
+      message: "Team or task identifier is missing."
+    });
+  }
+
+  await completeTask(teamId, taskId, {
     verifiedByAdmin: true,
     completionNotes: "Manually verified by admin/operator."
   });
@@ -366,8 +423,17 @@ router.post("/teams/:teamId/complete-task/:taskId", requireAdmin, async (req, re
 });
 
 router.delete("/teams/:teamId", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
   const team = await prisma.team.findUnique({
-    where: { id: req.params.teamId }
+    where: { id: teamId }
   });
 
   if (!team) {
@@ -396,7 +462,8 @@ router.post("/tasks", requireAdmin, async (req, res) => {
 
   const task = await prisma.task.create({
     data: {
-      ...payload
+      ...payload,
+      acceptedAnswers: payload.acceptedAnswers ?? Prisma.JsonNull
     }
   });
 
@@ -408,10 +475,20 @@ router.post("/tasks", requireAdmin, async (req, res) => {
 router.put("/tasks/:taskId", requireAdmin, async (req, res) => {
   const payload = taskSchema.parse(req.body);
 
+  const taskId = resolveParamId(req.params.taskId);
+
+  if (!taskId) {
+    return res.status(400).json({
+      error: "INVALID_TASK_ID",
+      message: "Task identifier is missing."
+    });
+  }
+
   const task = await prisma.task.update({
-    where: { id: req.params.taskId },
+    where: { id: taskId },
     data: {
-      ...payload
+      ...payload,
+      acceptedAnswers: payload.acceptedAnswers ?? Prisma.JsonNull
     }
   });
 
@@ -419,17 +496,39 @@ router.put("/tasks/:taskId", requireAdmin, async (req, res) => {
 });
 
 router.delete("/tasks/:taskId", requireAdmin, async (req, res) => {
+  const taskId = resolveParamId(req.params.taskId);
+
+  if (!taskId) {
+    return res.status(400).json({
+      error: "INVALID_TASK_ID",
+      message: "Task identifier is missing."
+    });
+  }
+
   await prisma.task.delete({
-    where: { id: req.params.taskId }
+    where: { id: taskId }
   });
   res.json({ success: true });
 });
 
 router.post("/config", requireAdmin, async (req, res) => {
   const payload = configSchema.parse(req.body);
-  const config = await prisma.appConfig.update({
+  const config = await prisma.appConfig.upsert({
     where: { id: "default" },
-    data: payload
+    update: payload,
+    create: {
+      id: "default",
+      eventTitle: payload.eventTitle ?? "The Pirate Trials",
+      roundName: payload.roundName ?? "Round 1",
+      eventStatus: payload.eventStatus ?? "READY",
+      eventPaused: payload.eventPaused ?? false,
+      submissionsLocked: payload.submissionsLocked ?? false,
+      pauseOnFullscreenExit: payload.pauseOnFullscreenExit ?? true,
+      pauseOnTabHidden: payload.pauseOnTabHidden ?? false,
+      musicEnabled: payload.musicEnabled ?? true,
+      soundsEnabled: payload.soundsEnabled ?? true,
+      musicTrackPath: payload.musicTrackPath ?? "/audio/odyssey-theme.mp3"
+    }
   });
 
   if (payload.eventPaused === true) {
@@ -454,6 +553,170 @@ router.post("/config", requireAdmin, async (req, res) => {
 router.post("/event/reset", requireAdmin, async (_req, res) => {
   await resetAllTeamProgress();
   res.json({ success: true });
+});
+
+router.post("/dev/simulate", requireAdmin, async (req, res) => {
+  const appEnv = (process.env.APP_ENV ?? process.env.NODE_ENV ?? "development").toLowerCase();
+
+  if (appEnv === "production") {
+    return res.status(403).json({
+      error: "DEV_ONLY",
+      message: "Development simulation is disabled in production."
+    });
+  }
+
+  const scenarioSchema = z.object({
+    scenario: z.enum([
+      "new",
+      "task1-active",
+      "task1-complete",
+      "task2-active",
+      "task2-complete",
+      "winner",
+      "disqualified"
+    ]),
+    teamName: z.string().trim().min(2).max(40).optional()
+  });
+
+  const payload = scenarioSchema.parse(req.body);
+  const scenario = payload.scenario;
+
+  const candidate = payload.teamName
+    ? await prisma.team.findFirst({
+        where: { normalizedName: payload.teamName.trim().toLowerCase() }
+      })
+    : await prisma.team.findFirst({
+        where: { isTestTeam: true },
+        orderBy: { createdAt: "asc" }
+      });
+
+  if (!candidate) {
+    const created = await prisma.team.create({
+      data: {
+        teamCode: `DEV-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+        teamName: payload.teamName ?? "DEV CREW",
+        normalizedName: (payload.teamName ?? "DEV CREW").trim().toLowerCase(),
+        status: TeamStatus.PENDING,
+        isTestTeam: true
+      }
+    });
+
+    const taskOne = await prisma.task.findFirst({ where: { taskNumber: 1, roundNumber: 1 } });
+    if (taskOne) {
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: created.id, taskId: taskOne.id } },
+        create: { teamId: created.id, taskId: taskOne.id, status: TaskStateStatus.AVAILABLE },
+        update: { status: TaskStateStatus.AVAILABLE }
+      });
+    }
+
+    return res.json({ success: true, team: created });
+  }
+
+  const taskOne = await prisma.task.findFirst({ where: { taskNumber: 1, roundNumber: 1 } });
+  const taskTwo = await prisma.task.findFirst({ where: { taskNumber: 2, roundNumber: 1 } });
+
+  if (scenario === "new") {
+    const created = await prisma.team.create({
+      data: {
+        teamCode: `DEV-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+        teamName: payload.teamName ?? `DEV CREW ${Date.now()}`,
+        normalizedName: (payload.teamName ?? `DEV CREW ${Date.now()}`).trim().toLowerCase(),
+        status: TeamStatus.PENDING,
+        isTestTeam: true
+      }
+    });
+    if (taskOne) {
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: created.id, taskId: taskOne.id } },
+        create: { teamId: created.id, taskId: taskOne.id, status: TaskStateStatus.AVAILABLE },
+        update: { status: TaskStateStatus.AVAILABLE }
+      });
+    }
+    return res.json({ success: true, team: created });
+  }
+
+  if (taskOne && taskTwo) {
+    const firstState = await prisma.teamTaskState.findUnique({ where: { teamId_taskId: { teamId: candidate.id, taskId: taskOne.id } } });
+    const secondState = await prisma.teamTaskState.findUnique({ where: { teamId_taskId: { teamId: candidate.id, taskId: taskTwo.id } } });
+
+    if (scenario === "task1-active") {
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskOne.id } },
+        create: { teamId: candidate.id, taskId: taskOne.id, status: TaskStateStatus.AVAILABLE, startedAt: new Date(), deadlineAt: new Date(Date.now() + 60_000) },
+        update: { status: TaskStateStatus.AVAILABLE, startedAt: new Date(), deadlineAt: new Date(Date.now() + 60_000) }
+      });
+    }
+
+    if (scenario === "task1-complete") {
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskOne.id } },
+        create: { teamId: candidate.id, taskId: taskOne.id, status: TaskStateStatus.COMPLETED, completedAt: new Date() },
+        update: { status: TaskStateStatus.COMPLETED, completedAt: new Date() }
+      });
+      if (secondState) {
+        await prisma.teamTaskState.upsert({
+          where: { teamId_taskId: { teamId: candidate.id, taskId: taskTwo.id } },
+          create: { teamId: candidate.id, taskId: taskTwo.id, status: TaskStateStatus.AVAILABLE },
+          update: { status: TaskStateStatus.AVAILABLE, startedAt: null, deadlineAt: null }
+        });
+      }
+    }
+
+    if (scenario === "task2-active") {
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskOne.id } },
+        create: { teamId: candidate.id, taskId: taskOne.id, status: TaskStateStatus.COMPLETED, completedAt: new Date() },
+        update: { status: TaskStateStatus.COMPLETED, completedAt: new Date() }
+      });
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskTwo.id } },
+        create: { teamId: candidate.id, taskId: taskTwo.id, status: TaskStateStatus.AVAILABLE, startedAt: new Date(), deadlineAt: new Date(Date.now() + 120_000) },
+        update: { status: TaskStateStatus.AVAILABLE, startedAt: new Date(), deadlineAt: new Date(Date.now() + 120_000) }
+      });
+    }
+
+    if (scenario === "task2-complete") {
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskOne.id } },
+        create: { teamId: candidate.id, taskId: taskOne.id, status: TaskStateStatus.COMPLETED, completedAt: new Date() },
+        update: { status: TaskStateStatus.COMPLETED, completedAt: new Date() }
+      });
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskTwo.id } },
+        create: { teamId: candidate.id, taskId: taskTwo.id, status: TaskStateStatus.COMPLETED, completedAt: new Date() },
+        update: { status: TaskStateStatus.COMPLETED, completedAt: new Date() }
+      });
+    }
+
+    if (scenario === "winner") {
+      await prisma.team.update({
+        where: { id: candidate.id },
+        data: {
+          status: TeamStatus.COMPLETED,
+          completedAt: new Date(),
+          winnerRank: 1,
+          currentRound: 1,
+          currentTask: 2,
+          lastActivityAt: new Date()
+        }
+      });
+      await prisma.teamTaskState.upsert({
+        where: { teamId_taskId: { teamId: candidate.id, taskId: taskTwo.id } },
+        create: { teamId: candidate.id, taskId: taskTwo.id, status: TaskStateStatus.COMPLETED, completedAt: new Date() },
+        update: { status: TaskStateStatus.COMPLETED, completedAt: new Date() }
+      });
+    }
+
+    if (scenario === "disqualified") {
+      await prisma.team.update({
+        where: { id: candidate.id },
+        data: { status: TeamStatus.DISQUALIFIED, lastActivityAt: new Date() }
+      });
+    }
+  }
+
+  res.json({ success: true, team: candidate });
 });
 
 export default router;

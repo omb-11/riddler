@@ -9,3 +9,6 @@ server/dist
 server/generated
 server/prisma/dev.db
 server/prisma/dev.db-journal
+
+.vercel
+.env*

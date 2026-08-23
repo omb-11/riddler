@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -158,6 +158,7 @@ model AdminUser {
 model AppConfig {
   id                     String   @id @default("default")
   eventTitle             String   @default("The Pirate Trials")
+  roundName              String   @default("Round 1")
   eventStatus            String   @default("READY")
   submissionsLocked      Boolean  @default(false)
   eventPaused            Boolean  @default(false)

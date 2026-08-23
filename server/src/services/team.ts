@@ -148,8 +148,9 @@ export function shapeTeamState(
   config: AppConfig
 ) {
   const currentTaskState =
-    team.taskStates.find((state) =>
-      [TaskStateStatus.AVAILABLE, TaskStateStatus.IN_PROGRESS].includes(state.status)
+    team.taskStates.find(
+      (state) =>
+        state.status === TaskStateStatus.AVAILABLE || state.status === TaskStateStatus.IN_PROGRESS
     ) ??
     team.taskStates.find((state) => state.status === TaskStateStatus.COMPLETED) ??
     null;

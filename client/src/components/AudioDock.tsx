@@ -11,10 +11,16 @@ export function AudioDock({
 }) {
   return (
     <div className="audio-dock">
-      <button type="button" className="ghost-button" onClick={onToggleMute}>
-        {muted ? "Sound Off" : "Sound On"}
+      <button
+        type="button"
+        className="ghost-button audio-toggle"
+        onClick={onToggleMute}
+        aria-label={muted ? "Enable audio" : "Mute audio"}
+      >
+        {muted ? "Off" : "On"}
       </button>
       <input
+        className="audio-slider"
         aria-label="Volume"
         type="range"
         min="0"

@@ -107,6 +107,12 @@ export const api = {
   async adminAction(path: string, method: "POST" | "DELETE" = "POST") {
     return request<{ success: boolean }>(`/admin${path}`, { method });
   },
+  async simulateTeamScenario(scenario: string, teamName?: string) {
+    return request<{ success: boolean; team: unknown }>("/admin/dev/simulate", {
+      method: "POST",
+      body: JSON.stringify({ scenario, teamName })
+    });
+  },
   async upsertTask(taskId: string | null, payload: Record<string, unknown>) {
     return request<{ task: unknown }>(taskId ? `/admin/tasks/${taskId}` : "/admin/tasks", {
       method: taskId ? "PUT" : "POST",

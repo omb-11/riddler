@@ -1,4 +1,4 @@
-import { EventType } from "@prisma/client";
+import { EventType, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
 export async function logEvent(
@@ -12,7 +12,7 @@ export async function logEvent(
     data: {
       eventType,
       teamId: options?.teamId ?? null,
-      metadata: options?.metadata ?? undefined
+      metadata: (options?.metadata ?? undefined) as Prisma.InputJsonValue | undefined
     }
   });
 }

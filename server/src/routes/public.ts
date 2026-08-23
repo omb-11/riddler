@@ -30,11 +30,24 @@ const eventSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional()
 });
 
-router.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
-    timestamp: new Date().toISOString()
-  });
+router.get("/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1 as ok`;
+    res.json({
+      ok: true,
+      appEnv: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
+      database: "healthy",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      appEnv: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
+      database: "unhealthy",
+      timestamp: new Date().toISOString(),
+      error: "DATABASE_UNAVAILABLE"
+    });
+  }
 });
 
 router.post("/teams/session", async (req, res) => {
@@ -123,9 +136,25 @@ router.post("/events", requireTeamSession, async (req, res) => {
   res.json({ team: state });
 });
 
+function resolveParamId(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
 router.post("/tasks/:taskId/submit", requireTeamSession, async (req, res) => {
   const payload = submitAnswerSchema.parse(req.body);
   const config = await getDefaultConfig();
+  const taskId = resolveParamId(req.params.taskId);
+
+  if (!taskId) {
+    return res.status(400).json({
+      error: "INVALID_TASK_ID",
+      message: "Task identifier is missing."
+    });
+  }
 
   if (config.eventPaused) {
     return res.status(423).json({
@@ -142,7 +171,7 @@ router.post("/tasks/:taskId/submit", requireTeamSession, async (req, res) => {
   }
 
   const task = await prisma.task.findUnique({
-    where: { id: req.params.taskId }
+    where: { id: taskId }
   });
 
   if (!task || !task.isActive) {
@@ -176,7 +205,10 @@ router.post("/tasks/:taskId/submit", requireTeamSession, async (req, res) => {
     });
   }
 
-  if (![TaskStateStatus.IN_PROGRESS, TaskStateStatus.AVAILABLE].includes(taskState.status)) {
+  if (
+    taskState.status !== TaskStateStatus.IN_PROGRESS &&
+    taskState.status !== TaskStateStatus.AVAILABLE
+  ) {
     return res.status(409).json({
       error: "TASK_LOCKED",
       message: "This task is not currently available."
@@ -266,8 +298,17 @@ router.post("/tasks/:taskId/submit", requireTeamSession, async (req, res) => {
 });
 
 router.post("/tasks/:taskId/tower-submit", requireTeamSession, async (req, res) => {
+  const taskId = resolveParamId(req.params.taskId);
+
+  if (!taskId) {
+    return res.status(400).json({
+      error: "INVALID_TASK_ID",
+      message: "Task identifier is missing."
+    });
+  }
+
   const task = await prisma.task.findUnique({
-    where: { id: req.params.taskId }
+    where: { id: taskId }
   });
 
   if (!task || task.answerType !== AnswerType.TOWER_VERIFICATION) {

@@ -32,6 +32,24 @@ riddler/
 └── README.md
 ```
 
+## Local Testing
+
+```bash
+npm install
+cp .env.example .env
+npx prisma db push --schema server/prisma/schema.prisma
+npx prisma db seed --schema server/prisma/schema.prisma
+npm run dev
+npm run build
+```
+
+Development-only admin credentials:
+
+- Email: `admin@riddler.local`
+- Password: `ChangeThisAdminPassword123!`
+
+These values are only for local development testing. In production, never expose demo credentials or debug routes.
+
 ## Installation
 
 1. Install dependencies:
@@ -48,6 +66,7 @@ cp .env.example .env
 
 3. Update the values for:
 
+- `APP_ENV`
 - `DATABASE_URL`
 - `SESSION_SECRET`
 - `ADMIN_EMAIL`

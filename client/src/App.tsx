@@ -33,7 +33,17 @@ export default function App() {
   }, []);
 
   if (loading) {
-    return <main className="trial-shell"><section className="hero-panel">Loading Riddler...</section></main>;
+    return (
+      <main className="trial-shell odyssey-shell loading-shell">
+        <div className="sky-glow sky-glow-one" />
+        <div className="sky-glow sky-glow-two" />
+        <section className="hero-panel odyssey-hero loading-panel">
+          <span className="eyebrow">STABILIZING SIGNAL</span>
+          <h1>ODYSSEY</h1>
+          <p className="tagline">Aligning the star map and preparing the route...</p>
+        </section>
+      </main>
+    );
   }
 
   return (

@@ -130,34 +130,75 @@ async function main() {
     }
   });
 
-  const demoTeam = await prisma.team.upsert({
-    where: { teamCode: "BLACK-PEARL" },
-    update: {},
-    create: {
-      teamCode: "BLACK-PEARL",
-      teamName: "BLACK PEARL",
-      normalizedName: "black pearl",
-      status: "PENDING",
-      isTestTeam: true
-    }
-  });
+  const demoTeams = [
+    { teamCode: "BLACK-PEARL", teamName: "BLACK PEARL", normalizedName: "black pearl" },
+    { teamCode: "SEA-WOLVES", teamName: "SEA WOLVES", normalizedName: "sea wolves" },
+    { teamCode: "STORM-RAIDERS", teamName: "STORM RAIDERS", normalizedName: "storm raiders" },
+    { teamCode: "THE-KRAKENS", teamName: "THE KRAKENS", normalizedName: "the krakens" },
+    { teamCode: "GOLDEN-ANCHOR", teamName: "GOLDEN ANCHOR", normalizedName: "golden anchor" },
+    { teamCode: "OCEAN-REAPERS", teamName: "OCEAN REAPERS", normalizedName: "ocean reapers" },
+    { teamCode: "LOST-VOYAGERS", teamName: "LOST VOYAGERS", normalizedName: "lost voyagers" },
+    { teamCode: "IRON-COMPASS", teamName: "IRON COMPASS", normalizedName: "iron compass" },
+    { teamCode: "RED-SAILORS", teamName: "RED SAILORS", normalizedName: "red sailors" },
+    { teamCode: "THE-BUCCANEERS", teamName: "THE BUCCANEERS", normalizedName: "the buccaneers" }
+  ];
 
-  await prisma.teamTaskState.upsert({
-    where: {
-      teamId_taskId: {
-        teamId: demoTeam.id,
-        taskId: taskOne.id
+  for (const demoTeam of demoTeams) {
+    const team = await prisma.team.upsert({
+      where: { teamCode: demoTeam.teamCode },
+      update: {},
+      create: {
+        teamCode: demoTeam.teamCode,
+        teamName: demoTeam.teamName,
+        normalizedName: demoTeam.normalizedName,
+        status: "PENDING",
+        isTestTeam: true
       }
-    },
-    update: {
-      status: TaskStateStatus.AVAILABLE
-    },
-    create: {
-      teamId: demoTeam.id,
-      taskId: taskOne.id,
-      status: TaskStateStatus.AVAILABLE
+    });
+
+    await prisma.teamTaskState.upsert({
+      where: {
+        teamId_taskId: {
+          teamId: team.id,
+          taskId: taskOne.id
+        }
+      },
+      update: {
+        status: TaskStateStatus.AVAILABLE
+      },
+      create: {
+        teamId: team.id,
+        taskId: taskOne.id,
+        status: TaskStateStatus.AVAILABLE
+      }
+    });
+
+    const taskTwo = await prisma.task.findFirst({
+      where: { roundNumber: 1, taskNumber: 2 }
+    });
+
+    if (taskTwo) {
+      await prisma.teamTaskState.upsert({
+        where: {
+          teamId_taskId: {
+            teamId: team.id,
+            taskId: taskTwo.id
+          }
+        },
+        update: {
+          status: TaskStateStatus.LOCKED,
+          startedAt: null,
+          deadlineAt: null,
+          completedAt: null
+        },
+        create: {
+          teamId: team.id,
+          taskId: taskTwo.id,
+          status: TaskStateStatus.LOCKED
+        }
+      });
     }
-  });
+  }
 }
 
 main()

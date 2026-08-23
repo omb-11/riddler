@@ -59,7 +59,11 @@ export function AdminDashboardPage() {
     navigate("/admin/login");
   }
 
-  async function runAction(action: () => Promise<unknown>) {
+  async function runAction(action: () => Promise<unknown>, confirmationText?: string) {
+    if (confirmationText && !window.confirm(confirmationText)) {
+      return;
+    }
+
     try {
       await action();
       await load();
@@ -146,10 +150,21 @@ export function AdminDashboardPage() {
             >
               {data.config.submissionsLocked ? "UNLOCK SUBMISSIONS" : "LOCK SUBMISSIONS"}
             </button>
-            <button type="button" className="ghost-button" onClick={() => runAction(() => api.adminAction("/event/reset"))}>
+            <button type="button" className="ghost-button" onClick={() => runAction(() => api.adminAction("/event/reset"), "Reset the event for all teams? This clears progress but keeps tasks and admin data.") }>
               RESET EVENT
             </button>
           </div>
+          {import.meta.env.DEV ? (
+            <div className="button-row">
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("new"), "Create a fresh demo team?")}>New team</button>
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("task1-active"), "Set a demo team to Task 1 active?")}>Task 1 active</button>
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("task1-complete"), "Mark a demo team as Task 1 complete?")}>Task 1 complete</button>
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("task2-active"), "Set a demo team to Task 2 active?")}>Task 2 active</button>
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("task2-complete"), "Mark a demo team as Task 2 complete?")}>Task 2 complete</button>
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("winner"), "Create a winner demo team?")}>Winner</button>
+              <button type="button" className="ghost-button small" onClick={() => runAction(() => api.simulateTeamScenario("disqualified"), "Disqualify a demo team?")}>Disqualify</button>
+            </div>
+          ) : null}
           <div className="toggle-grid">
             <label><input type="checkbox" checked={data.config.pauseOnFullscreenExit} onChange={(e) => runAction(() => api.updateAdminConfig({ pauseOnFullscreenExit: e.target.checked }))} /> Pause on fullscreen exit</label>
             <label><input type="checkbox" checked={data.config.pauseOnTabHidden} onChange={(e) => runAction(() => api.updateAdminConfig({ pauseOnTabHidden: e.target.checked }))} /> Pause on tab hidden</label>
@@ -207,11 +222,11 @@ export function AdminDashboardPage() {
                   <td>{new Date(team.lastActivityAt).toLocaleTimeString()}</td>
                   <td>
                     <div className="inline-actions">
-                      <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}/advance`))}>Advance</button>
-                      <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}/reset`))}>Reset</button>
-                      <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}/disqualify`))}>DQ</button>
+                      <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}/advance`), `Advance ${team.teamName}?`)}>Advance</button>
+                      <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}/reset`), `Reset ${team.teamName}'s progress?`)}>Reset</button>
+                      <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}/disqualify`), `Disqualify ${team.teamName}?`)}>DQ</button>
                       {team.isTestTeam ? (
-                        <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}`, "DELETE"))}>
+                        <button type="button" className="ghost-button small" onClick={() => runAction(() => api.adminAction(`/teams/${team.id}`, "DELETE"), `Delete test team ${team.teamName}?`) }>
                           Delete
                         </button>
                       ) : null}
