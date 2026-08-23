@@ -42,8 +42,20 @@ export const api = {
       method: "GET"
     });
   },
-  async createTeamSession(teamName: string) {
+  async createTeamSession(teamName: string, qrPayload?: string) {
     return request<{ team: TeamState }>("/teams/session", {
+      method: "POST",
+      body: JSON.stringify({ teamName, qrPayload })
+    });
+  },
+  async verifyTeamQr(teamName: string, qrPayload: string) {
+    return request<{ valid: boolean; team: { id: string; teamName: string; teamCode: string; status: string }; teamCode: string; teamName: string; message: string }>("/teams/verify-qr", {
+      method: "POST",
+      body: JSON.stringify({ teamName, qrPayload })
+    });
+  },
+  async createTestQr(teamName: string) {
+    return request<{ valid: boolean; qrPayload: string; team: { id: string; teamName: string; teamCode: string; status: string }; teamCode: string; message: string }>("/teams/test-qr", {
       method: "POST",
       body: JSON.stringify({ teamName })
     });
@@ -97,6 +109,16 @@ export const api = {
   },
   async getAdminDashboard() {
     return request<AdminDashboard>("/admin/dashboard", { method: "GET" });
+  },
+  async generateTeamQr(teamId: string) {
+    return request<{ success: boolean; token: string; qrDataUrl: string; joinUrl: string; teamName: string; teamCode: string }>(`/admin/teams/${teamId}/qr`, {
+      method: "POST"
+    });
+  },
+  async getTeamQr(teamId: string) {
+    return request<{ token: string; qrDataUrl: string | null; joinUrl: string; teamId: string }>(`/admin/teams/${teamId}/qr`, {
+      method: "GET"
+    });
   },
   async updateAdminConfig(payload: Record<string, unknown>) {
     return request<{ config: unknown }>("/admin/config", {

@@ -31,6 +31,16 @@ export function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [taskForm, setTaskForm] = useState(defaultTaskForm);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [selectedQrTeamId, setSelectedQrTeamId] = useState<string>("");
+  const [qrPreview, setQrPreview] = useState<{ qrDataUrl: string; teamName: string; teamCode: string } | null>(null);
+  const hostStats = data
+    ? [
+        { label: "Active teams", value: String(data.summary.activeTeams) },
+        { label: "Completed", value: String(data.summary.completedTeams) },
+        { label: "Paused", value: String(data.summary.pausedTeams) },
+        { label: "Fastest", value: data.leaderboard[0] ? data.leaderboard[0].teamName : "Awaiting" }
+      ]
+    : [];
 
   async function load() {
     setLoading(true);
@@ -53,6 +63,36 @@ export function AdminDashboardPage() {
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (!data?.teams.length) {
+      setSelectedQrTeamId("");
+      return;
+    }
+
+    if (!selectedQrTeamId) {
+      setSelectedQrTeamId(data.teams[0].id);
+    }
+  }, [data?.teams, selectedQrTeamId]);
+
+  async function handleGenerateQr() {
+    if (!selectedQrTeamId) {
+      setError("Select a team before generating a QR code.");
+      return;
+    }
+
+    try {
+      const generated = await api.generateTeamQr(selectedQrTeamId);
+      setQrPreview({
+        qrDataUrl: generated.qrDataUrl,
+        teamName: generated.teamName,
+        teamCode: generated.teamCode
+      });
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "QR generation failed.");
+    }
+  }
 
   async function handleLogout() {
     await api.adminLogout();
@@ -123,6 +163,70 @@ export function AdminDashboardPage() {
       </section>
 
       <section className="admin-columns">
+        <div className="admin-panel">
+          <div className="section-heading">
+            <h2>HOST MODE</h2>
+          </div>
+          <div className="host-grid">
+            {hostStats.map((stat) => (
+              <div key={stat.label} className="host-stat">
+                <span>{stat.label}</span>
+                <strong>{stat.value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="admin-panel">
+          <div className="section-heading">
+            <h2>Live Leaderboard</h2>
+          </div>
+          <ul className="leaderboard-list">
+            {data.leaderboard.slice(0, 8).map((entry) => (
+              <li key={entry.id}>
+                <div>
+                  <strong>#{entry.rank}</strong>
+                  <span>{entry.teamName}</span>
+                </div>
+                <div className="leaderboard-meta">
+                  <small>{entry.score} pts</small>
+                  <small>{entry.progressPercent}%</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="admin-panel">
+          <div className="section-heading">
+            <h2>QR Generator</h2>
+          </div>
+          <div className="split-grid">
+            <label>
+              <span>Team</span>
+              <select value={selectedQrTeamId} onChange={(event) => setSelectedQrTeamId(event.target.value)}>
+                {data.teams.map((team) => (
+                  <option key={team.id} value={team.id}>{team.teamName}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="button-row">
+            <button type="button" className="primary-button" onClick={handleGenerateQr}>GENERATE QR</button>
+          </div>
+          {qrPreview ? (
+            <div className="admin-qr-preview">
+              <img src={qrPreview.qrDataUrl} alt={`${qrPreview.teamName} QR code`} />
+              <div>
+                <strong>{qrPreview.teamName}</strong>
+                <span>{qrPreview.teamCode}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="empty-state">No QR generated yet.</p>
+          )}
+        </div>
+
         <div className="admin-panel">
           <div className="section-heading">
             <h2>Event Control</h2>

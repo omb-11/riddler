@@ -74,8 +74,22 @@ model Team {
   taskStates     TeamTaskState[]
   submissions    Submission[]
   events         EventLog[]
+  tokens         TeamToken[]
 
   @@index([normalizedName])
+}
+
+model TeamToken {
+  id         String    @id @default(cuid())
+  teamId     String
+  token      String    @unique
+  qrDataUrl  String?   @db.Text
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  isActive   Boolean   @default(true)
+  team       Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, isActive])
 }
 
 model Task {

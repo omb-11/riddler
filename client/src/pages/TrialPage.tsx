@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import { ApiError, api } from "../services/api";
 import type { TeamState, TeamTask } from "../types";
 import { AudioDock } from "../components/AudioDock";
@@ -29,12 +30,17 @@ export function TrialPage({
   setTeam: (team: TeamState | null) => void;
 }) {
   const [teamName, setTeamName] = useState("");
+  const [manualQrCode, setManualQrCode] = useState("");
+  const [qrPayload, setQrPayload] = useState("");
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [towerMessage, setTowerMessage] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [clock, setClock] = useState(() => new Date());
+  const scannerRef = useRef<Html5Qrcode | null>(null);
   const currentTask = useMemo(() => getCurrentTask(team), [team]);
   const audio = useAudio(
     team?.config.musicTrackPath,
@@ -50,6 +56,15 @@ export function TrialPage({
     const timer = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setToast(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     if (team?.status === "COMPLETED") {
@@ -73,19 +88,86 @@ export function TrialPage({
     return () => window.clearInterval(refresh);
   }, [team?.id, team?.status, currentTask?.id, currentTask?.answerType, setTeam]);
 
+  useEffect(() => {
+    if (!scannerOpen) {
+      return;
+    }
+
+    const elementId = "riddler-camera-scan";
+    const element = document.getElementById(elementId);
+
+    if (!element) {
+      return;
+    }
+
+    const scanner = new Html5Qrcode(elementId);
+    scannerRef.current = scanner;
+
+    scanner
+      .start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        async (decodedText) => {
+          try {
+            await scanner.stop();
+          } catch {
+            // ignore stop failures
+          }
+          setQrPayload(decodedText);
+          setScannerOpen(false);
+          setError(null);
+        },
+        () => undefined
+      )
+      .catch(() => {
+        setError("Camera access was denied or this device cannot scan QR codes.");
+        setScannerOpen(false);
+      });
+
+    return () => {
+      if (scannerRef.current) {
+        void scannerRef.current.stop().catch(() => undefined);
+        scannerRef.current = null;
+      }
+    };
+  }, [scannerOpen]);
+
   async function handleCreateSession(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setToast(null);
+
+    const trimmedTeamName = teamName.trim();
+
+    if (!trimmedTeamName) {
+      setError("Enter your crew name before entering the trial.");
+      setLoading(false);
+      return;
+    }
 
     try {
-      const response = await api.createTeamSession(teamName);
+      if (!qrPayload) {
+        setError("Scan the crew QR to verify your team before entering the trial.");
+        return;
+      }
+
+      const verification = await api.verifyTeamQr(trimmedTeamName, qrPayload);
+      if (!verification.valid) {
+        setError("The scanned QR does not belong to this crew.");
+        return;
+      }
+
+      const response = await api.createTeamSession(trimmedTeamName, qrPayload);
       setTeam(response.team);
+      setToast("Crew verified. The trail is live.");
       await fullscreen.requestFullscreen();
       await audio.unlockAndPlay();
       audio.playSound("click");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Could not enter the trial.");
+      const message = caught instanceof ApiError ? caught.message : "Could not enter the trial.";
+      setError(message);
+      setToast(message);
     } finally {
       setLoading(false);
     }
@@ -162,6 +244,27 @@ export function TrialPage({
     audio.playSound("click");
   }
 
+  async function handleTestQr() {
+    if (!teamName.trim()) {
+      setError("Enter your crew name before using a test QR.");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      const response = await api.createTestQr(teamName.trim());
+      setQrPayload(response.qrPayload);
+      setFeedback("TEST QR READY");
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Test QR failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (!team) {
     const landingCards = [
       { title: "Map", caption: "A hidden route" },
@@ -211,20 +314,79 @@ export function TrialPage({
 
           <form className="stack-form" onSubmit={handleCreateSession}>
             <label>
-              <span>CREW IDENTIFICATION</span>
+              <span>TEAM NAME</span>
               <input
                 value={teamName}
                 onChange={(event) => setTeamName(event.target.value)}
-                placeholder="Team Name"
+                placeholder="Enter your team name"
                 maxLength={40}
                 required
               />
             </label>
+
+            <div className="qr-controls">
+              <button type="button" className="ghost-button" onClick={() => setScannerOpen(true)} disabled={loading || !teamName.trim()}>
+                SCAN CREW QR
+              </button>
+              <button type="button" className="ghost-button" onClick={handleTestQr} disabled={loading || !teamName.trim()}>
+                USE TEST QR
+              </button>
+            </div>
+
+            <label>
+              <span>MANUAL QR CODE</span>
+              <input
+                value={manualQrCode}
+                onChange={(event) => setManualQrCode(event.target.value)}
+                placeholder="Paste or type the QR payload"
+              />
+            </label>
+            <button
+              type="button"
+              className="ghost-button small"
+              onClick={() => {
+                const trimmed = manualQrCode.trim();
+                if (!trimmed) {
+                  setError("Paste a QR payload before continuing.");
+                  return;
+                }
+                setQrPayload(trimmed);
+                setFeedback("MANUAL QR LOADED");
+                setError(null);
+              }}
+              disabled={loading || !teamName.trim()}
+            >
+              APPLY MANUAL QR
+            </button>
+
+            {qrPayload ? (
+              <div className="qr-verified-box">
+                <span>✓ CREW VERIFIED</span>
+                <strong>{teamName.trim().toUpperCase()}</strong>
+                <small>{qrPayload.slice(0, 18)}...</small>
+              </div>
+            ) : null}
+
             {error ? <p className="feedback error">{error}</p> : null}
-            <button type="submit" className="primary-button" disabled={loading}>
-              {loading ? "ENTERING..." : "ENTER THE TRIAL"}
+            {feedback ? <p className="feedback success">{feedback}</p> : null}
+
+            <button type="submit" className="primary-button" disabled={loading || !qrPayload}>
+              {loading ? "VERIFYING..." : "ENTER THE TRIAL"}
             </button>
           </form>
+
+          {scannerOpen ? (
+            <div className="scanner-overlay" role="dialog" aria-modal="true">
+              <div className="scanner-panel">
+                <div className="scanner-header">
+                  <span className="eyebrow">CREW QR SCAN</span>
+                  <button type="button" className="ghost-button small" onClick={() => setScannerOpen(false)}>CLOSE</button>
+                </div>
+                <div id="riddler-camera-scan" className="camera-reader" />
+                <p className="scanner-copy">Point your camera at the crew QR to verify the team.</p>
+              </div>
+            </div>
+          ) : null}
 
           <div className="resource-band">
             {landingCards.map((card) => (
@@ -244,9 +406,9 @@ export function TrialPage({
   const task = currentTask;
   const missionStats = [
     { label: "Crew", value: team.teamName },
-    { label: "Current", value: `Task ${team.currentTask || 0}` },
-    { label: "Status", value: team.status },
-    { label: "Clock", value: clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }
+    { label: "Score", value: `${team.score} pts` },
+    { label: "Progress", value: `${team.progressPercent}%` },
+    { label: "Rank", value: `#${team.rank}` }
   ];
 
   return (
@@ -368,6 +530,10 @@ export function TrialPage({
                   </div>
                 ))}
               </div>
+              <div className="progress-rail" aria-label="team progress">
+                <span style={{ width: `${team.progressPercent}%` }} />
+              </div>
+              <p className="progress-copy">{team.completedTasks}/{team.totalTasks} clues cleared</p>
             </div>
 
             <div className="sidebar-card">
@@ -380,6 +546,8 @@ export function TrialPage({
             </div>
           </aside>
         </section>
+
+        {toast ? <div className="game-toast">{toast}</div> : null}
 
         <AudioDock
           muted={audio.isMuted}

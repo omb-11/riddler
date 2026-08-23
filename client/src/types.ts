@@ -37,6 +37,11 @@ export interface TeamState {
   status: TeamStatus;
   currentRound: number;
   currentTask: number;
+  score: number;
+  rank: number;
+  completedTasks: number;
+  totalTasks: number;
+  progressPercent: number;
   completedAt: string | null;
   lastActivityAt: string;
   config: {
@@ -82,6 +87,16 @@ export interface AdminDashboard {
     teamName: string;
     completedAt: string | null;
     rank: number;
+  }>;
+  leaderboard: Array<{
+    id: string;
+    teamName: string;
+    score: number;
+    completedTasks: number;
+    totalTasks: number;
+    progressPercent: number;
+    rank: number;
+    status: TeamStatus;
   }>;
   teams: Array<{
     id: string;

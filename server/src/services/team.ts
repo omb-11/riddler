@@ -8,6 +8,8 @@ import {
   type Task,
   type Team
 } from "@prisma/client";
+import crypto from "node:crypto";
+import QRCode from "qrcode";
 import { prisma } from "../lib/prisma.js";
 import { logEvent } from "./events.js";
 
@@ -24,6 +26,177 @@ export function generateTeamCode(teamName: string) {
     .slice(0, 18);
   const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `${slug || "CREW"}-${suffix}`;
+}
+
+export function generateSecureToken() {
+  return crypto.randomBytes(18).toString("hex");
+}
+
+export function buildTeamQrPayload(team: Pick<Team, "id" | "teamCode" | "teamName">, token: string) {
+  return JSON.stringify({
+    version: 1,
+    type: "riddler-team",
+    teamId: team.id,
+    teamCode: team.teamCode,
+    teamName: team.teamName,
+    token,
+    issuedAt: new Date().toISOString()
+  });
+}
+
+export async function verifyTeamQrPayload(
+  teamName: string,
+  payload: string
+): Promise<
+  | { valid: false; reason: "EMPTY_QR_PAYLOAD" | "INVALID_OR_REVOKED_QR" | "TEAM_NAME_MISMATCH" | "TEAM_ID_MISMATCH" }
+  | {
+      valid: true;
+      reason: null;
+      team: Team;
+      token: string;
+      joinUrl: string;
+      qrDataUrl: string | null;
+    }
+> {
+  const raw = payload.trim();
+
+  if (!raw) {
+    return { valid: false, reason: "EMPTY_QR_PAYLOAD" };
+  }
+
+  let decoded: Record<string, unknown> | null = null;
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object") {
+      decoded = parsed as Record<string, unknown>;
+    }
+  } catch {
+    decoded = null;
+  }
+
+  const token = decoded && typeof decoded.token === "string" ? decoded.token : raw;
+
+  const info = await getTeamJoinInfo(token);
+
+  if (!info) {
+    return { valid: false, reason: "INVALID_OR_REVOKED_QR" };
+  }
+
+  const expectedName = normalizeTeamName(teamName);
+  const decodedName = decoded && typeof decoded.teamName === "string" ? normalizeTeamName(decoded.teamName) : null;
+  const actualName = normalizeTeamName(info.team.teamName);
+
+  if (decodedName && decodedName !== expectedName) {
+    return { valid: false, reason: "TEAM_NAME_MISMATCH" };
+  }
+
+  if (actualName !== expectedName) {
+    return { valid: false, reason: "TEAM_NAME_MISMATCH" };
+  }
+
+  if (decoded && typeof decoded.teamId === "string" && decoded.teamId !== info.team.id) {
+    return { valid: false, reason: "TEAM_ID_MISMATCH" };
+  }
+
+  return {
+    valid: true,
+    reason: null,
+    team: info.team,
+    token: info.token,
+    joinUrl: info.joinUrl,
+    qrDataUrl: info.qrDataUrl ?? null
+  };
+}
+
+export async function getActiveTeamToken(teamId: string) {
+  const token = await prisma.teamToken.findFirst({
+    where: {
+      teamId,
+      isActive: true
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  if (token) {
+    return token;
+  }
+
+  return prisma.teamToken.create({
+    data: {
+      teamId,
+      token: generateSecureToken(),
+      isActive: true
+    }
+  });
+}
+
+export async function issueTeamToken(teamId: string, qrDataUrl?: string) {
+  const existing = await prisma.teamToken.findMany({
+    where: { teamId, isActive: true }
+  });
+
+  if (existing.length) {
+    await prisma.teamToken.updateMany({
+      where: { teamId, isActive: true },
+      data: { isActive: false, revokedAt: new Date() }
+    });
+  }
+
+  const token = generateSecureToken();
+  return prisma.teamToken.create({
+    data: {
+      teamId,
+      token,
+      qrDataUrl,
+      isActive: true
+    }
+  });
+}
+
+export async function getTeamJoinInfo(token: string) {
+  const record = await prisma.teamToken.findUnique({
+    where: { token },
+    include: { team: true }
+  });
+
+  if (!record || !record.isActive || record.revokedAt) {
+    return null;
+  }
+
+  return {
+    token: record.token,
+    team: record.team,
+    qrDataUrl: record.qrDataUrl,
+    joinUrl: `/join/${record.token}`
+  };
+}
+
+export async function resolveTeamToken(token: string) {
+  const info = await getTeamJoinInfo(token);
+  if (!info) {
+    return null;
+  }
+
+  return {
+    teamId: info.team.id,
+    teamName: info.team.teamName,
+    teamCode: info.team.teamCode,
+    token: info.token,
+    joinUrl: info.joinUrl
+  };
+}
+
+export async function makeQrDataUrl(text: string) {
+  return QRCode.toDataURL(text, {
+    errorCorrectionLevel: "M",
+    margin: 1,
+    width: 420,
+    color: {
+      dark: "#171a1a",
+      light: "#f8f3ea"
+    }
+  });
 }
 
 export async function getDefaultConfig() {
@@ -155,6 +328,12 @@ export function shapeTeamState(
     team.taskStates.find((state) => state.status === TaskStateStatus.COMPLETED) ??
     null;
 
+  const completedTasks = team.taskStates.filter((state) => state.status === TaskStateStatus.COMPLETED).length;
+  const totalTasks = team.taskStates.length || 1;
+  const progressPercent = Math.round((completedTasks / totalTasks) * 100);
+  const score = completedTasks * 125 + (team.status === TeamStatus.COMPLETED ? 400 : 0);
+  const rank = team.winnerRank ?? Math.max(1, completedTasks + 1);
+
   return {
     id: team.id,
     teamCode: team.teamCode,
@@ -162,6 +341,11 @@ export function shapeTeamState(
     status: team.status,
     currentRound: team.currentRound,
     currentTask: team.currentTask,
+    score,
+    rank,
+    completedTasks,
+    totalTasks,
+    progressPercent,
     completedAt: team.completedAt,
     lastActivityAt: team.lastActivityAt,
     config: {

@@ -11,8 +11,12 @@ import {
   completeTask,
   createOrRestoreTeam,
   expireTaskIfNeeded,
+  getActiveTeamToken,
   getDefaultConfig,
-  getTeamState
+  getTeamState,
+  normalizeTeamName,
+  verifyTeamQrPayload,
+  buildTeamQrPayload
 } from "../services/team.js";
 
 const router = Router();
@@ -51,13 +55,95 @@ router.get("/health", async (_req, res) => {
 });
 
 router.post("/teams/session", async (req, res) => {
-  const payload = createTeamSchema.parse(req.body);
-  const team = await createOrRestoreTeam(payload.teamName);
+  const payload = z.object({
+    teamName: z.string().trim().min(2).max(40),
+    qrPayload: z.string().trim().min(10).max(2000).optional()
+  }).parse(req.body);
+
+  let team: Awaited<ReturnType<typeof createOrRestoreTeam>>;
+  team = await createOrRestoreTeam(payload.teamName);
+
+  if (payload.qrPayload) {
+    const verification = await verifyTeamQrPayload(payload.teamName, payload.qrPayload);
+
+    if (!verification.valid) {
+      return res.status(400).json({
+        error: verification.reason ?? "INVALID_QR",
+        message: verification.reason === "TEAM_NAME_MISMATCH"
+          ? "The scanned QR does not belong to this crew."
+          : "The scanned QR is invalid or has expired."
+      });
+    }
+
+    const verifiedTeam = await prisma.team.findUnique({ where: { id: verification.team.id } });
+    if (!verifiedTeam) {
+      return res.status(404).json({
+        error: "TEAM_NOT_FOUND",
+        message: "The verified crew could not be found."
+      });
+    }
+
+    team = verifiedTeam;
+  }
+
   setTeamCookie(res, team.id);
   const state = await getTeamState(team.id);
 
   res.status(201).json({
     team: state
+  });
+});
+
+router.post("/teams/verify-qr", async (req, res) => {
+  const payload = z.object({
+    teamName: z.string().trim().min(2).max(40),
+    qrPayload: z.string().trim().min(10).max(2000)
+  }).parse(req.body);
+
+  const verification = await verifyTeamQrPayload(payload.teamName, payload.qrPayload);
+
+  if (!verification.valid) {
+    return res.status(400).json({
+      error: verification.reason ?? "INVALID_QR",
+      message: verification.reason === "TEAM_NAME_MISMATCH"
+        ? "The scanned QR does not belong to this crew."
+        : "The scanned QR is invalid or has expired."
+    });
+  }
+
+  res.json({
+    valid: true,
+    team: {
+      id: verification.team.id,
+      teamName: verification.team.teamName,
+      teamCode: verification.team.teamCode,
+      status: verification.team.status
+    },
+    joinUrl: verification.joinUrl,
+    teamCode: verification.team.teamCode,
+    teamName: verification.team.teamName,
+    message: "CREW VERIFIED"
+  });
+});
+
+router.post("/teams/test-qr", async (req, res) => {
+  const payload = z.object({ teamName: z.string().trim().min(2).max(40) }).parse(req.body);
+
+  const team = await createOrRestoreTeam(payload.teamName);
+  const token = await getActiveTeamToken(team.id);
+  const qrPayload = buildTeamQrPayload(team, token.token);
+
+  res.json({
+    valid: true,
+    qrPayload,
+    team: {
+      id: team.id,
+      teamName: team.teamName,
+      teamCode: team.teamCode,
+      status: team.status
+    },
+    teamCode: team.teamCode,
+    message: "TEST QR READY"
   });
 });
 
@@ -78,6 +164,82 @@ router.get("/session", async (req, res) => {
 
   res.json({
     team: state ?? null
+  });
+});
+
+router.get("/teams/join/:token", async (req, res) => {
+  const token = resolveParamId(req.params.token);
+
+  if (!token) {
+    return res.status(400).json({
+      error: "MISSING_TOKEN",
+      message: "Crew identifier is missing."
+    });
+  }
+
+  const info = await prisma.teamToken.findUnique({
+    where: { token },
+    include: { team: true }
+  });
+
+  if (!info || !info.isActive || info.revokedAt) {
+    return res.status(404).json({
+      error: "INVALID_CREW_IDENTIFIER",
+      message: "This QR is not valid or has expired."
+    });
+  }
+
+  res.json({
+    valid: true,
+    team: {
+      id: info.team.id,
+      teamName: info.team.teamName,
+      teamCode: info.team.teamCode,
+      status: info.team.status
+    },
+    joinUrl: `/join/${token}`
+  });
+});
+
+router.post("/teams/join", async (req, res) => {
+  const payload = z.object({
+    token: z.string().trim().min(10).max(200),
+    teamName: z.string().trim().min(2).max(60).optional()
+  }).parse(req.body);
+
+  const info = await prisma.teamToken.findUnique({
+    where: { token: payload.token },
+    include: { team: true }
+  });
+
+  if (!info || !info.isActive || info.revokedAt) {
+    return res.status(404).json({
+      error: "INVALID_CREW_IDENTIFIER",
+      message: "This QR is not valid or has expired."
+    });
+  }
+
+  if (payload.teamName && normalizeTeamName(info.team.teamName) !== normalizeTeamName(payload.teamName)) {
+    return res.status(403).json({
+      error: "TEAM_NAME_MISMATCH",
+      message: "The scanned QR does not belong to this crew."
+    });
+  }
+
+  if (info.team.status === TeamStatus.DISQUALIFIED) {
+    return res.status(403).json({
+      error: "TEAM_INACTIVE",
+      message: "This crew is no longer active."
+    });
+  }
+
+  setTeamCookie(res, info.team.id);
+  const state = await getTeamState(info.team.id);
+
+  res.json({
+    team: state,
+    teamName: info.team.teamName,
+    teamCode: info.team.teamCode
   });
 });
 

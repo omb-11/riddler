@@ -1,5 +1,7 @@
 import bcrypt from "bcryptjs";
 import { AnswerType, EventType, Prisma, TaskStateStatus, TeamStatus } from "@prisma/client";
+import crypto from "node:crypto";
+import QRCode from "qrcode";
 import { Router } from "express";
 import { z } from "zod";
 import { clearAdminCookie, setAdminCookie } from "../lib/cookies.js";
@@ -159,6 +161,24 @@ router.get("/dashboard", requireAdmin, async (_req, res) => {
       return a.completedAt.getTime() - b.completedAt.getTime();
     });
 
+  const leaderboard = teams
+    .map((team) => {
+      const completedTasks = team.taskStates.filter((state) => state.status === TaskStateStatus.COMPLETED).length;
+      const totalTasks = team.taskStates.length || 1;
+      const score = completedTasks * 125 + (team.status === TeamStatus.COMPLETED ? 400 : 0);
+      return {
+        id: team.id,
+        teamName: team.teamName,
+        score,
+        completedTasks,
+        totalTasks,
+        progressPercent: Math.round((completedTasks / totalTasks) * 100),
+        rank: team.winnerRank ?? Math.max(1, completedTasks + 1),
+        status: team.status
+      };
+    })
+    .sort((a, b) => b.score - a.score || a.teamName.localeCompare(b.teamName));
+
   res.json({
     summary: {
       totalTeams: teams.length,
@@ -179,6 +199,10 @@ router.get("/dashboard", requireAdmin, async (_req, res) => {
       teamName: team.teamName,
       completedAt: team.completedAt,
       rank: team.winnerRank ?? index + 1
+    })),
+    leaderboard: leaderboard.map((entry, index) => ({
+      ...entry,
+      rank: index + 1
     })),
     teams: teams.map((team) => {
       const activeState =
@@ -237,6 +261,9 @@ router.get("/teams", requireAdmin, async (req, res) => {
         orderBy: {
           submittedAt: "desc"
         }
+      },
+      tokens: {
+        orderBy: { createdAt: "desc" }
       }
     },
     orderBy: {
@@ -245,6 +272,141 @@ router.get("/teams", requireAdmin, async (req, res) => {
   });
 
   res.json({ teams });
+});
+
+router.post("/teams", requireAdmin, async (req, res) => {
+  const teamName = z.object({
+    teamName: z.string().trim().min(2).max(60)
+  }).parse(req.body).teamName;
+
+  const team = await prisma.team.create({
+    data: {
+      teamCode: `CREW-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      teamName,
+      normalizedName: teamName.trim().toLowerCase(),
+      status: TeamStatus.PENDING,
+      isTestTeam: true
+    }
+  });
+
+  await logEvent(EventType.TEAM_CREATED, {
+    teamId: team.id,
+    metadata: { teamName }
+  });
+
+  const token = await prisma.teamToken.create({
+    data: {
+      teamId: team.id,
+      token: crypto.randomBytes(18).toString("hex"),
+      isActive: true
+    }
+  });
+
+  res.status(201).json({
+    team,
+    token,
+    joinUrl: `/join/${token.token}`
+  });
+});
+
+router.post("/teams/:teamId/qr", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId }
+  });
+
+  if (!team) {
+    return res.status(404).json({
+      error: "TEAM_NOT_FOUND",
+      message: "Team not found."
+    });
+  }
+
+  const all = await prisma.teamToken.findMany({
+    where: { teamId, isActive: true }
+  });
+
+  if (all.length) {
+    await prisma.teamToken.updateMany({
+      where: { teamId, isActive: true },
+      data: { isActive: false, revokedAt: new Date() }
+    });
+  }
+
+  const token = await prisma.teamToken.create({
+    data: {
+      teamId,
+      token: crypto.randomBytes(18).toString("hex"),
+      isActive: true
+    }
+  });
+
+  const baseUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  const joinUrl = `${baseUrl}/join/${token.token}`;
+  const qrDataUrl = await QRCode.toDataURL(joinUrl, {
+    errorCorrectionLevel: "M",
+    margin: 1,
+    width: 420,
+    color: { dark: "#171a1a", light: "#f8f3ea" }
+  });
+
+  await prisma.teamToken.update({
+    where: { id: token.id },
+    data: { qrDataUrl }
+  });
+
+  await logEvent(EventType.TEAM_CREATED, {
+    teamId,
+    metadata: { qrGenerated: true, joinUrl }
+  });
+
+  res.json({
+    success: true,
+    token: token.token,
+    qrDataUrl,
+    joinUrl,
+    teamName: team.teamName,
+    teamCode: team.teamCode
+  });
+});
+
+router.get("/teams/:teamId/qr", requireAdmin, async (req, res) => {
+  const teamId = resolveParamId(req.params.teamId);
+
+  if (!teamId) {
+    return res.status(400).json({
+      error: "INVALID_TEAM_ID",
+      message: "Team identifier is missing."
+    });
+  }
+
+  const token = await prisma.teamToken.findFirst({
+    where: { teamId, isActive: true },
+    orderBy: { createdAt: "desc" }
+  });
+
+  if (!token) {
+    return res.status(404).json({
+      error: "QR_NOT_FOUND",
+      message: "No active QR is available for this team."
+    });
+  }
+
+  const baseUrl = process.env.CLIENT_URL || "http://localhost:5173";
+  res.json({
+    token: token.token,
+    qrDataUrl: token.qrDataUrl ?? null,
+    joinUrl: `${baseUrl}/join/${token.token}`,
+    teamId
+  });
 });
 
 router.get("/teams/:teamId/timeline", requireAdmin, async (req, res) => {
