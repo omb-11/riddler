@@ -158,42 +158,43 @@ export function TrialPage({
         <div className="sky-glow sky-glow-one" />
         <div className="sky-glow sky-glow-two" />
 
-        <section className="hero-panel odyssey-hero">
+        <section className="hero-panel odyssey-hero editorial-hero">
           <div className="hero-grid">
             <div className="hero-copy">
-              <span className="eyebrow">AETHER / EVENT 01</span>
-              <h1>ODYSSEY</h1>
-              <p className="tagline">Thread the stars, decode the signal, and reclaim the lost route.</p>
+              <span className="eyebrow">RIDDLER / ROUND 01</span>
+              <h1>THE PIRATE TRIALS</h1>
+              <p className="tagline">Every clue has a price. Every second matters.</p>
 
-              <div className="hero-metrics">
-                <div className="metric-pill">
-                  <span>Signal</span>
-                  <strong>Stable</strong>
-                </div>
+              <div className="hero-metrics compact-metrics">
                 <div className="metric-pill">
                   <span>Route</span>
-                  <strong>24/7</strong>
+                  <strong>Unmarked</strong>
                 </div>
                 <div className="metric-pill">
-                  <span>Voyage</span>
+                  <span>Signal</span>
                   <strong>Live</strong>
+                </div>
+                <div className="metric-pill">
+                  <span>Clock</span>
+                  <strong>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</strong>
                 </div>
               </div>
             </div>
 
             <div className="hero-visual" aria-hidden="true">
-              <div className="planet-sphere" />
-              <div className="planet-ring ring-one" />
-              <div className="planet-ring ring-two" />
-              <div className="signal-dot dot-one" />
-              <div className="signal-dot dot-two" />
-              <div className="signal-dot dot-three" />
+              <div className="compass-shell">
+                <div className="compass-ring" />
+                <div className="compass-ring inner" />
+                <div className="compass-needle north" />
+                <div className="compass-needle east" />
+                <div className="compass-core" />
+              </div>
             </div>
           </div>
 
           <form className="stack-form" onSubmit={handleCreateSession}>
             <label>
-              <span>ENTER YOUR TEAM NAME</span>
+              <span>CREW IDENTIFICATION</span>
               <input
                 value={teamName}
                 onChange={(event) => setTeamName(event.target.value)}
@@ -242,8 +243,8 @@ export function TrialPage({
       <div className="app-frame odyssey-frame">
         <header className="trial-header odyssey-header">
           <div>
-            <span className="brand">ODYSSEY</span>
-            <p>{team.teamName.toUpperCase()} // ROUND 01 / TASK {team.currentTask || "00"}</p>
+            <span className="brand">RIDDLER</span>
+            <p>CREW — {team.teamName.toUpperCase()} // ROUND 01 / TASK {team.currentTask || "00"}</p>
           </div>
           <div className="header-side">
             <span className="live-badge">LIVE</span>

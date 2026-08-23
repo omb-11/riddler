@@ -115,13 +115,11 @@ export function AdminDashboardPage() {
 
       {error ? <p className="feedback error">{error}</p> : null}
 
-      <section className="metrics-grid">
-        <article className="metric"><span>Total Teams</span><strong>{data.summary.totalTeams}</strong></article>
+      <section className="metrics-grid compact-metrics-grid">
+        <article className="metric"><span>Teams</span><strong>{data.summary.totalTeams}</strong></article>
         <article className="metric"><span>Active</span><strong>{data.summary.activeTeams}</strong></article>
         <article className="metric"><span>Completed</span><strong>{data.summary.completedTeams}</strong></article>
-        <article className="metric"><span>Wrong Attempts</span><strong>{data.summary.wrongAttempts}</strong></article>
-        <article className="metric"><span>Paused</span><strong>{data.summary.pausedTeams}</strong></article>
-        <article className="metric"><span>Fullscreen Exits</span><strong>{data.summary.fullscreenInterruptions}</strong></article>
+        <article className="metric"><span>Attempts</span><strong>{data.summary.wrongAttempts}</strong></article>
       </section>
 
       <section className="admin-columns">

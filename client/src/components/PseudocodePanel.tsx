@@ -7,6 +7,9 @@ export function PseudocodePanel({
 }) {
   return (
     <section className="challenge-block">
+      <div className="artifact-header">
+        <span className="eyebrow">Cipher Sheet</span>
+      </div>
       {pseudocode ? (
         <pre className="pseudocode" aria-label="Pseudocode challenge">
           {pseudocode}
